@@ -1,5 +1,5 @@
 
-name: GRITAILEN Android Build
+name: GRITAILEN Android 16 APK
 
 on:
   push:
@@ -9,26 +9,69 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: barichello/godot-ci:4.3
 
     steps:
-      - name: Ambil file proyek
+      - name: Ambil proyek GitHub
         uses: actions/checkout@v4
 
-      - name: Ekstrak proyek game
-        run: |
-          mkdir game
-          unzip -q GRITAILEN-Android-Prototipe.zip -d game
+      - name: Siapkan Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-      - name: Periksa proyek Godot
+      - name: Siapkan Android SDK 36
         run: |
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -q commandlinetools-linux-11076708_latest.zip
+          mv cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.1.0" \
+            "cmdline-tools;latest" \
+            "ndk;29.0.14206865" \
+            "cmake;3.22.1"
+
+      - name: Install Godot 4.6
+        run: |
+          wget -q https://github.com/godotengine/godot-builds/releases/download/4.6-stable/Godot_v4.6-stable_linux.x86_64.zip
+          wget -q https://github.com/godotengine/godot-builds/releases/download/4.6-stable/Godot_v4.6-stable_export_templates.tpz
+
+          unzip -q Godot_v4.6-stable_linux.x86_64.zip
+          sudo mv Godot_v4.6-stable_linux.x86_64 /usr/local/bin/godot
+          sudo chmod +x /usr/local/bin/godot
+
+          mkdir -p ~/.local/share/godot/export_templates/4.6.stable
+          unzip -q Godot_v4.6-stable_export_templates.tpz
+          mv templates/* ~/.local/share/godot/export_templates/4.6.stable/
+
+      - name: Ekstrak proyek GRITAILEN
+        run: |
+          mkdir -p game
+          unzip -q GRITAILEN-Android-Prototipe.zip -d game
           test -f game/project.godot
+          test -f game/export_presets.cfg
+
+      - name: Import proyek
+        run: |
           godot --headless --path game --editor --quit
 
-      - name: Simpan proyek
+      - name: Build APK Android 16
+        run: |
+          mkdir -p game/build
+          godot --headless --path game \
+            --export-debug "Android" \
+            game/build/GRITAILEN-Android16.apk
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: GRITAILEN-Android-Project
-          path: game/
-          
+          name: GRITAILEN-Android16-APK
+          path: game/build/GRITAILEN-Android16.apk
